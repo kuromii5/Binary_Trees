@@ -1,6 +1,5 @@
 import { RBNode } from "./TypeBT";
 import { RBColor } from "./TypeBT";
-import { print2D } from "./TypeBT";
 
 class RBTree<T> {
     root: RBNode<T> | null;
@@ -13,6 +12,18 @@ class RBTree<T> {
         const newNode = { value, color: RBColor.R, left: null, right: null, parent: null };
         this.insertNode(newNode);
         if (newNode === this.root) newNode.color = RBColor.B;
+    }
+
+    public remove(n: T) {
+        if (this.root == null)
+            return;
+ 
+        const node: RBNode<T> | null = this.search(this.root, n);
+ 
+        if (node?.value != n)
+            return;
+ 
+        this.removeNode(node!);
     }
     
     private insertNode(node: RBNode<T>): void {
@@ -47,8 +58,8 @@ class RBTree<T> {
         while (node !== this.root && node.parent?.color === RBColor.R) {
             let p = node.parent;
             if (p === p.parent?.left) {
-                const sibling = p.parent?.right;
-                let gp = p.parent;
+                const gp = p.parent;
+                const sibling = gp.right;
         
                 if (sibling?.color === RBColor.R) {
                     p.color = RBColor.B;
@@ -71,8 +82,8 @@ class RBTree<T> {
                     break;
                 }
             } else {
-                const sibling = p.parent?.left;
-                let gp = p.parent;
+                const gp = p.parent;
+                const sibling = gp?.left;
         
                 if (sibling?.color === RBColor.R) {
                     p.color = RBColor.B;
@@ -100,124 +111,147 @@ class RBTree<T> {
         this.root!.color = RBColor.B;
     }
 
-    public remove(value: T) {
-        const nodeToRemove = this.search(this.root, value);
-        if (!nodeToRemove) return;
-        this.removeNode(nodeToRemove);
-    }
-
-    private removeNode(nodeToRemove: RBNode<T>): void {
-        let fixupNode: RBNode<T> | null = null;
-        let replacementNode: RBNode<T> | null = null;
-
-        if (!nodeToRemove.left || !nodeToRemove.right) {
-            replacementNode = nodeToRemove;
-        } else {
-            replacementNode = this.successor(nodeToRemove.right);
+    private removeNode(node: RBNode<T>): void {
+        const fixupNode = this.replace(node);
+        const uvBlack = ((fixupNode === null || fixupNode.color === RBColor.B) && (node.color === RBColor.B));
+        let parent = node.parent;
+    
+        if (fixupNode === null) {
+            if (node === this.root)
+                this.root = null;
+            else {
+                if (uvBlack)
+                    this.adjustTreeDel(node);
+    
+                else if (this.sibling(node) !== null)
+                    this.sibling(node)!.color = RBColor.R;
+    
+                if (this.isOnLeft(node))
+                    parent!.left = null;
+                else
+                    parent!.right = null;
+            }
+            return;
         }
-
-        if (replacementNode) {
-            if (replacementNode.left) {
-                fixupNode = replacementNode.left;
+    
+        if (node.left === null || node.right === null) {
+            if (node === this.root) {
+                node.value = fixupNode.value;
+                node.left = node.right = null;
             } else {
-                fixupNode = replacementNode.right;
-            }
+                if (this.isOnLeft(node))
+                    parent!.left = fixupNode;
+                else
+                    parent!.right = fixupNode;
     
-            if (fixupNode) {
-                fixupNode.parent = replacementNode.parent;
-            }
+                fixupNode!.parent = parent;
     
-            if (!replacementNode.parent) {
-                this.root = fixupNode;
-            } else if (replacementNode === replacementNode.parent.left) {
-                replacementNode.parent.left = fixupNode;
-            } else {
-                replacementNode.parent.right = fixupNode;
+                if (uvBlack)
+                    this.adjustTreeDel(fixupNode!);
+                else
+                    fixupNode!.color = RBColor.B;
             }
-    
-            if (replacementNode !== nodeToRemove) {
-                nodeToRemove.value = replacementNode.value;
-            }
-    
-            if (replacementNode.color === RBColor.B) {
-                this.adjustTreeDel(fixupNode);
-            }
+            return;
         }
+    
+        this.swapValues(fixupNode!, node);
+        this.removeNode(fixupNode!);
     }
 
     private adjustTreeDel(node: RBNode<T> | null): void {
-        if (!node) return;
-
-        while (node !== this.root && node?.color === RBColor.B) {
-            const p: RBNode<T> | null = node!.parent;
-    
-            if (p && node === p.left) {
-                let sibling = p.right;
-    
-                if (sibling?.color === RBColor.R) {
-                    sibling.color = RBColor.B;
-                    p.color = RBColor.R;
-                    this.leftRotate(p);
-                    sibling = p.right;
-                }
-    
-                if (sibling) {
-                    if (sibling.left?.color === RBColor.B && sibling.right?.color === RBColor.B) {
-                        sibling.color = RBColor.R;
-                        node = p;
-                    } else {
-                        if (sibling.right?.color === RBColor.B && sibling.left) {
-                            sibling.left.color = RBColor.B;
-                            sibling.color = RBColor.R;
+        if (node == this.root)
+            return;
+ 
+        const sibling = this.sibling(node);
+        const parent = node?.parent;
+ 
+        if (sibling == null)
+            this.adjustTreeDel(parent!);
+        else {
+            if (sibling.color == RBColor.R) {
+                parent!.color = RBColor.R;
+                sibling.color = RBColor.B;
+ 
+                if (this.isOnLeft(sibling))
+                    this.rightRotate(parent!);
+                else
+                    this.leftRotate(parent!);
+ 
+                this.adjustTreeDel(node);
+            } else {
+                if (this.hasRedChild(sibling)) {
+                    if (sibling.left != null && sibling.left.color == RBColor.R) {
+                        if (this.isOnLeft(sibling)) {
+                            sibling.left.color = sibling.color;
+                            sibling.color = parent!.color;
+                            this.rightRotate(parent!);
+                        } else {
+                            sibling.left.color = parent!.color;
                             this.rightRotate(sibling);
-                            sibling = p.right;
+                            this.leftRotate(parent!);
                         }
-    
-                        if (sibling) sibling.color = p.color;
-                        p.color = RBColor.B;
-                        if (sibling && sibling.right) sibling.right.color = RBColor.B;
-                        this.leftRotate(p);
-                        node = this.root;
-                    }
-                }
-            } else if (p){
-                let sibling = p.left;
-    
-                if (sibling?.color === RBColor.R) {
-                    sibling.color = RBColor.B;
-                    p.color = RBColor.R;
-                    this.rightRotate(p);
-                    sibling = p.left;
-                }
-    
-                if (sibling) {
-                    if (sibling.right?.color === RBColor.B && sibling.left?.color === RBColor.B) {
-                        sibling.color = RBColor.R;
-                        node = p;
                     } else {
-                        if (sibling.left?.color === RBColor.B && sibling.right) {
-                            sibling.right.color = RBColor.B;
-                            sibling.color = RBColor.R;
+                        if (this.isOnLeft(sibling)) {
+                            sibling.right!.color = parent!.color;
                             this.leftRotate(sibling);
-                            sibling = p.left;
+                            this.rightRotate(parent!);
+                        } else {
+                            sibling.right!.color = sibling.color;
+                            sibling.color = parent!.color;
+                            this.leftRotate(parent!);
                         }
-    
-                        if (sibling) sibling.color = p.color;
-                        p.color = RBColor.B;
-                        if (sibling && sibling.left) sibling.left.color = RBColor.B;
-                        this.rightRotate(p);
-                        node = this.root;
                     }
+                    parent!.color = RBColor.B;
+                } else {
+                    sibling.color = RBColor.R;
+                    if (parent!.color == RBColor.B)
+                        this.adjustTreeDel(parent!);
+                    else
+                        parent!.color = RBColor.B;
                 }
             }
         }
-    
-        if (node) {
-            node.color = RBColor.B;
-        }
     }
 
-    private successor(node: RBNode<T>): RBNode<T> | null { 
+    private replace(node: RBNode<T>): RBNode<T> | null {
+        if (node.left !== null && node.right !== null)
+            return this.successor(node.right);
+    
+        if (node.left === null && node.right === null)
+            return null;
+    
+        if (node.left !== null)
+            return node.left;
+        else
+            return node.right;
+    }
+
+    private swapValues(u: RBNode<T>, v: RBNode<T>): void {
+        const temp = u.value;
+        u.value = v.value;
+        v.value = temp;
+    }
+
+    private isOnLeft(node: RBNode<T> | null): boolean {
+        return node == node?.parent?.left;
+    }
+
+    private sibling(node: RBNode<T> | null): RBNode<T> | null {
+        if (node?.parent == null)
+            return null;
+ 
+        if (this.isOnLeft(node))
+            return node!.parent!.right;
+ 
+        return node!.parent!.left;
+    }
+
+    private hasRedChild(node: RBNode<T>): boolean {
+        return (node.left != null && node.left.color == RBColor.R) ||
+               (node.right != null && node.right.color == RBColor.R);
+    }
+
+    private successor(node: RBNode<T>): RBNode<T> { 
         let curr = node;
         while (curr.left != null) curr = curr.left; 
         return curr; 
